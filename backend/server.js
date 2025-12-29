@@ -26,12 +26,12 @@ db.serialize(() => {
   db.run(`
     CREATE TABLE IF NOT EXISTS employees (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      employeeCode TEXT,
-      nameEn TEXT,
-      nameAr TEXT,
-      dob TEXT,
-      doj TEXT,
-      salary REAL
+      employeeCode VARCHAR(50) NOT NULL UNIQUE,
+      nameEn VARCHAR(100) NOT NULL,
+      nameAr VARCHAR(100) NOT NULL,
+      dob DATE,
+      doj DATE,
+      salary DECIMAL(10,2)
     )
   `);
 
@@ -39,9 +39,9 @@ db.serialize(() => {
     CREATE TABLE IF NOT EXISTS attendance (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       employeeId INTEGER,
-      date TEXT,
-      clockIn TEXT,
-      clockOut TEXT
+      date DATE,
+      clockIn TIME,
+      clockOut TIME
     )
   `);
 
@@ -53,7 +53,7 @@ db.serialize(() => {
         `INSERT INTO users (username, password) VALUES (?, ?)`,
         ["admin", hash]
       );
-      console.log("✅ Default user created: admin / admin123");
+      console.log("Default user created: admin / admin123");
     }
   });
 });
@@ -63,7 +63,6 @@ function auth(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ message: "No token" });
 
-  // Accept "Bearer token" or raw token
   const token = authHeader.startsWith("Bearer ")
     ? authHeader.split(" ")[1]
     : authHeader;
@@ -74,7 +73,6 @@ function auth(req, res, next) {
     next();
   });
 }
-
 // ================= AUTH =================
 app.post("/login", (req, res) => {
   const { username, password } = req.body;
@@ -101,14 +99,36 @@ app.get("/employees", auth, (req, res) => {
   });
 });
 
+// Helper: convert DD-MM-YYYY to YYYY-MM-DD
+const parseDate = (ddmmyyyy) => {
+  if (!ddmmyyyy) return null;
+  const [dd, mm, yyyy] = ddmmyyyy.split("-");
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 app.post("/employees", auth, (req, res) => {
   const { employeeCode, nameEn, nameAr, dob, doj, salary } = req.body;
 
+  if (!employeeCode || !nameEn || !nameAr || !dob || !doj || salary == null) {
+    return res.status(400).json({ message: "All fields are required" });
+  }
+
+  // Parse DD-MM-YYYY to YYYY-MM-DD
+  const dobSql = parseDate(dob);
+  const dojSql = parseDate(doj);
+
+  if (!dobSql || !dojSql) return res.status(400).json({ message: "Invalid date format" });
+  if (isNaN(Number(salary))) return res.status(400).json({ message: "Salary must be a number" });
+
   db.run(
-    `INSERT INTO employees VALUES (NULL, ?, ?, ?, ?, ?, ?)`,
-    [employeeCode, nameEn, nameAr, dob, doj, salary],
-    function () {
-      res.json({ id: this.lastID });
+    `INSERT INTO employees (employeeCode, nameEn, nameAr, dob, doj, salary) VALUES (?, ?, ?, ?, ?, ?)`,
+    [employeeCode, nameEn, nameAr, dobSql, dojSql, salary],
+    function(err) {
+      if (err) {
+        if (err.code === "SQLITE_CONSTRAINT") return res.status(400).json({ message: "Employee Code already exists" });
+        return res.status(500).json({ message: "Server error" });
+      }
+      res.status(201).json({ message: "Employee added successfully" });
     }
   );
 });
@@ -116,12 +136,39 @@ app.post("/employees", auth, (req, res) => {
 app.put("/employees/:id", auth, (req, res) => {
   const { employeeCode, nameEn, nameAr, dob, doj, salary } = req.body;
 
+  // 1️⃣ Required fields
+  if (!employeeCode || !nameEn || !nameAr || !dob || !doj || salary == null) {
+    return res.status(400).json({ message: "All fields are required" });
+  }
+
+  // 2️⃣ Validate types
+  if (isNaN(Date.parse(dob)) || isNaN(Date.parse(doj))) {
+    return res.status(400).json({ message: "Invalid date format" });
+  }
+
+  if (isNaN(Number(salary))) {
+    return res.status(400).json({ message: "Salary must be a number" });
+  }
+
+  // 3️⃣ Update DB
   db.run(
-    `UPDATE employees SET employeeCode=?, nameEn=?, nameAr=?, dob=?, doj=?, salary=? WHERE id=?`,
+    `UPDATE employees
+     SET employeeCode=?, nameEn=?, nameAr=?, dob=?, doj=?, salary=?
+     WHERE id=?`,
     [employeeCode, nameEn, nameAr, dob, doj, salary, req.params.id],
-    () => res.json({ message: "Updated" })
+    function (err) {
+      if (err) {
+        if (err.code === "SQLITE_CONSTRAINT") {
+          return res.status(400).json({ message: "Employee Code already exists" });
+        }
+        return res.status(500).json({ message: "Server error" });
+      }
+
+      res.json({ message: "Employee updated successfully" });
+    }
   );
 });
+
 
 app.delete("/employees/:id", auth, (req, res) => {
   db.run(`DELETE FROM employees WHERE id=?`, [req.params.id], () =>
@@ -135,10 +182,27 @@ app.post("/attendance/clock-in", auth, (req, res) => {
   const date = new Date().toISOString().split("T")[0];
   const time = new Date().toLocaleTimeString();
 
-  db.run(
-    `INSERT INTO attendance VALUES (NULL, ?, ?, ?, NULL)`,
-    [employeeId, date, time],
-    () => res.json({ message: "Clocked In" })
+  // Check if employee already clocked in today
+  db.get(
+    `SELECT * FROM attendance WHERE employeeId=? AND date=?`,
+    [employeeId, date],
+    (err, row) => {
+      if (err) return res.status(500).json({ message: "Server error" });
+
+      if (row) {
+        return res.status(400).json({ message: "Employee already clocked in today" });
+      }
+
+      // Insert new attendance
+      db.run(
+        `INSERT INTO attendance VALUES (NULL, ?, ?, ?, NULL)`,
+        [employeeId, date, time],
+        function (err) {
+          if (err) return res.status(500).json({ message: "Server error" });
+          res.json({ message: "Clocked In" });
+        }
+      );
+    }
   );
 });
 
@@ -146,10 +210,26 @@ app.post("/attendance/clock-out", auth, (req, res) => {
   const { employeeId } = req.body;
   const time = new Date().toLocaleTimeString();
 
-  db.run(
-    `UPDATE attendance SET clockOut=? WHERE employeeId=? AND clockOut IS NULL`,
-    [time, employeeId],
-    () => res.json({ message: "Clocked Out" })
+  // Check if employee has clocked in today
+  const date = new Date().toISOString().split("T")[0];
+  db.get(
+    `SELECT * FROM attendance WHERE employeeId=? AND date=?`,
+    [employeeId, date],
+    (err, row) => {
+      if (err) return res.status(500).json({ message: "Server error" });
+      if (!row) return res.status(400).json({ message: "Employee has not clocked in today" });
+      if (row.clockOut) return res.status(400).json({ message: "Employee already clocked out today" });
+
+      // Update clockOut
+      db.run(
+        `UPDATE attendance SET clockOut=? WHERE employeeId=? AND date=?`,
+        [time, employeeId, date],
+        function (err) {
+          if (err) return res.status(500).json({ message: "Server error" });
+          res.json({ message: "Clocked Out" });
+        }
+      );
+    }
   );
 });
 
@@ -167,5 +247,5 @@ app.get("/attendance/report", auth, (req, res) => {
 
 // ================= START =================
 app.listen(5000, () => {
-  console.log("🚀 Backend running on http://localhost:5000");
+  console.log("Backend running on http://localhost:5000");
 });

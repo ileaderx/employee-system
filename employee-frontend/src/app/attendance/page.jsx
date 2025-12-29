@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import API from "../services/api";
+import ProtectedRoute from "../../../components/ProtectedRoute";
 
 export default function Attendance() {
   const [employees, setEmployees] = useState([]);
@@ -23,8 +24,8 @@ export default function Attendance() {
     try {
       await API.post("/attendance/clock-in", { employeeId });
       showMessage("Clock In Success ✅");
-    } catch {
-      showMessage("Error clocking in ❌");
+    } catch (err) {
+      showMessage(err.response?.data?.message || "Error clocking in ❌");
     }
   };
 
@@ -33,51 +34,56 @@ export default function Attendance() {
     try {
       await API.post("/attendance/clock-out", { employeeId });
       showMessage("Clock Out Success ✅");
-    } catch {
-      showMessage("Error clocking out ❌");
+    } catch (err) {
+      showMessage(err.response?.data?.message || "Error clocking out ❌");
     }
   };
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6 text-center">Employee Attendance</h1>
-
-      {/* Employee Selector */}
-      <select
-        value={employeeId}
-        onChange={e => setEmployeeId(e.target.value)}
-        className="w-full border p-3 rounded mb-4"
-      >
-        <option value="">Select Employee</option>
-        {employees.map(emp => (
-          <option key={emp.id} value={emp.id}>
-            {emp.nameEn} ({emp.employeeCode})
-          </option>
-        ))}
-      </select>
-
-      {/* Buttons */}
-      <div className="flex flex-col md:flex-row md:space-x-4 space-y-2 md:space-y-0 mb-4">
+    <ProtectedRoute>
+      <div className="p-6 max-w-2xl mx-auto">
+        <h1 className="text-2xl font-bold mb-6 text-center">Employee Attendance</h1>
         <button
-          onClick={clockIn}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
+          onClick={() => window.history.back()}
+          className="bg-gray-300 text-gray-700 px-4 py-2 mb-4 rounded cursor-pointer hover:bg-gray-400 transition"
         >
-          Clock In
+          back
         </button>
-        <button
-          onClick={clockOut}
-          className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition"
-        >
-          Clock Out
-        </button>
-      </div>
 
-      {/* Message */}
-      {message && (
-        <div className="p-3 mb-4 bg-green-100 text-green-800 rounded text-center">
-          {message}
+        <select
+          value={employeeId}
+          onChange={e => setEmployeeId(e.target.value)}
+          className="w-full border p-3 rounded mb-4"
+        >
+          <option value="">Select Employee</option>
+          {employees.map(emp => (
+            <option key={emp.id} value={emp.id}>
+              {emp.nameEn} ({emp.employeeCode})
+            </option>
+          ))}
+        </select>
+
+        <div className="flex flex-col md:flex-row md:space-x-4 space-y-2 md:space-y-0 mb-4">
+          <button
+            onClick={clockIn}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
+          >
+            Clock In
+          </button>
+          <button
+            onClick={clockOut}
+            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition"
+          >
+            Clock Out
+          </button>
         </div>
-      )}
-    </div>
+
+        {message && (
+          <div className="p-3 mb-4 bg-green-100 text-green-800 rounded text-center">
+            {message}
+          </div>
+        )}
+      </div>
+    </ProtectedRoute>
   );
 }

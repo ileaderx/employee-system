@@ -32,10 +32,10 @@ export default function Employees() {
     const newErrors = {};
     if (!form.employeeCode) newErrors.employeeCode = true;
     if (!form.nameEn) newErrors.nameEn = true;
-    if (!form.nameAr) newErrors.nameAr = true;
+    if (!form.nameAr) newErrors.nameAr = false;
     if (!form.dob) newErrors.dob = true;
     if (!form.doj) newErrors.doj = true;
-    if (!form.salary) newErrors.salary = true;
+    if (!form.salary) newErrors.salary = false;
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -124,19 +124,21 @@ export default function Employees() {
           {[
             { key: "employeeCode", label: "Employee Code" },
             { key: "nameEn", label: "Name EN" },
-            { key: "nameAr", label: "Name AR" },
+            { key: "nameAr", label: "Name AR (Optional)" },
             { key: "dob", label: "DOB" },
             { key: "doj", label: "DOJ" },
-            { key: "salary", label: "Salary" },
+            { key: "salary", label: "Salary (Optional)" },
           ].map(f => (
-            <input
-              key={f.key}
-              type={f.key.includes("dob") || f.key.includes("doj") ? "text" : "text"}
-              placeholder={f.label}
-              value={form[f.key] || ""}
-              onChange={e => setForm({ ...form, [f.key]: e.target.value })}
-              className={`border p-2 rounded ${errors[f.key] ? "border-red-500" : ""}`}
-            />
+            <div key={f.key}>
+              <label className="flex flex-col">{f.label + (f.label.includes("(Optional)") ? "" : " *")}</label>
+              <input
+                type={f.key.includes("dob") || f.key.includes("doj") ? "text" : "text"}
+                placeholder={f.label}
+                value={form[f.key] || ""}
+                onChange={e => setForm({ ...form, [f.key]: e.target.value })}
+                className={`border p-2 rounded ${errors[f.key] ? "border-red-500" : ""}`}
+              />
+            </div>
           ))}
         </div>
 

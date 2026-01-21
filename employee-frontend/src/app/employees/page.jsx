@@ -117,7 +117,7 @@ export default function Employees() {
           onClick={() => window.history.back()}
           className="bg-gray-300 text-gray-700 px-4 py-2 mb-4 rounded cursor-pointer hover:bg-gray-400 transition"
         >
-          back
+          Back
         </button>
         {/* Form */}
         <div className="grid md:grid-cols-3 gap-2 mb-4">
@@ -136,6 +136,7 @@ export default function Employees() {
                 placeholder={f.label}
                 value={form[f.key] || ""}
                 onChange={e => setForm({ ...form, [f.key]: e.target.value })}
+                
                 className={`border p-2 rounded ${errors[f.key] ? "border-red-500" : ""}`}
               />
             </div>

@@ -46,14 +46,14 @@ db.serialize(() => {
   `);
 
   // Default user
-  db.get(`SELECT * FROM users WHERE username='admin'`, async (err, row) => {
+  db.get(`SELECT * FROM users WHERE username='admin2'`, async (err, row) => {
     if (!row) {
-      const hash = await bcrypt.hash("admin123", 10);
+      const hash = await bcrypt.hash("admin1234", 10);
       db.run(
         `INSERT INTO users (username, password) VALUES (?, ?)`,
-        ["admin", hash]
+        ["admin2", hash]
       );
-      console.log("Default user created: admin / admin123");
+      console.log("Default user created: admin2 / admin1234");
     }
   });
 });
@@ -99,6 +99,24 @@ app.get("/employees", auth, (req, res) => {
   });
 });
 
+const isValidDDMMYYYY = (dateStr) => {
+  if (!/^\d{2}-\d{2}-\d{4}$/.test(dateStr)) return false;
+
+  const [dd, mm, yyyy] = dateStr.split("-").map(Number);
+  const date = new Date(yyyy, mm - 1, dd);
+
+  return (
+    date.getFullYear() === yyyy &&
+    date.getMonth() === mm - 1 &&
+    date.getDate() === dd
+  );
+};
+
+const toSqlDate = (dateStr) => {
+  const [dd, mm, yyyy] = dateStr.split("-");
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 // Helper: convert DD-MM-YYYY to YYYY-MM-DD
 const parseDate = (ddmmyyyy) => {
   if (!ddmmyyyy) return null;
@@ -109,21 +127,32 @@ const parseDate = (ddmmyyyy) => {
 app.post("/employees", auth, (req, res) => {
   const { employeeCode, nameEn, nameAr, dob, doj, salary } = req.body;
 
-  if (!employeeCode || !nameEn || !nameAr || !dob || !doj || salary == null) {
+  if (
+    !employeeCode ||
+    !nameEn ||
+    !nameAr ||
+    !dob ||
+    !doj ||
+    salary == null
+  ) {
     return res.status(400).json({ message: "All fields are required" });
   }
 
-  // Parse DD-MM-YYYY to YYYY-MM-DD
-  const dobSql = parseDate(dob);
-  const dojSql = parseDate(doj);
+  if (!isValidDDMMYYYY(dob) || !isValidDDMMYYYY(doj)) {
+    return res.status(400).json({ message: "Invalid date format (DD-MM-YYYY)" });
+  }
 
-  if (!dobSql || !dojSql) return res.status(400).json({ message: "Invalid date format" });
-  if (isNaN(Number(salary))) return res.status(400).json({ message: "Salary must be a number" });
+  if (isNaN(Number(salary))) {
+    return res.status(400).json({ message: "Salary must be a number" });
+  }
+
+  const dobSql = toSqlDate(dob);
+  const dojSql = toSqlDate(doj);
 
   db.run(
     `INSERT INTO employees (employeeCode, nameEn, nameAr, dob, doj, salary) VALUES (?, ?, ?, ?, ?, ?)`,
     [employeeCode, nameEn, nameAr, dobSql, dojSql, salary],
-    function(err) {
+    function (err) {
       if (err) {
         if (err.code === "SQLITE_CONSTRAINT") return res.status(400).json({ message: "Employee Code already exists" });
         return res.status(500).json({ message: "Server error" });
@@ -136,19 +165,27 @@ app.post("/employees", auth, (req, res) => {
 app.put("/employees/:id", auth, (req, res) => {
   const { employeeCode, nameEn, nameAr, dob, doj, salary } = req.body;
 
-  // 1️⃣ Required fields
-  if (!employeeCode || !nameEn || !nameAr || !dob || !doj || salary == null) {
+  if (
+    !employeeCode ||
+    !nameEn ||
+    !nameAr ||
+    !dob ||
+    !doj ||
+    salary == null
+  ) {
     return res.status(400).json({ message: "All fields are required" });
   }
 
-  // 2️⃣ Validate types
-  if (isNaN(Date.parse(dob)) || isNaN(Date.parse(doj))) {
-    return res.status(400).json({ message: "Invalid date format" });
+  if (!isValidDDMMYYYY(dob) || !isValidDDMMYYYY(doj)) {
+    return res.status(400).json({ message: "Invalid date format (DD-MM-YYYY)" });
   }
 
   if (isNaN(Number(salary))) {
     return res.status(400).json({ message: "Salary must be a number" });
   }
+
+  const dobSql = toSqlDate(dob);
+  const dojSql = toSqlDate(doj);
 
   // 3️⃣ Update DB
   db.run(
